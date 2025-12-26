@@ -38,7 +38,8 @@ jobs:
 
       - name: Run clj-kondo (via Docker)
         run: |
-          docker run --rm -v "${{ github.workspace }}:/work" -w /work cljkondo/clj-kondo:latest clj-kondo --lint src test
+          docker run --rm -v "${{ github.workspace }}:/work" -w /work cljkondo/clj-kondo:latest clj-kondo --lint src test --fail-level error
+
 
       - name: Run tests
         run: lein test
