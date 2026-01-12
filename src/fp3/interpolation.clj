@@ -2,38 +2,41 @@
 
 (defrecord Point [x y])
 
-(defmulti interpolate
-  "Multimethod for different interpolation algorithms"
-  (fn [method points x] method))
+(def ^:private eps 1e-9)
+
+(defn- almost= [a b] (< (Math/abs (- a b)) eps))
+
+(defmulti interpolate (fn [method points x] method))
 
 (defmethod interpolate :linear
   [_ points x]
-  (let [[p0 p1] (take-last 2 points)
-        x0 (:x p0) y0 (:y p0)
-        x1 (:x p1) y1 (:y p1)]
-    (if (or (nil? x0) (nil? x1))
-      nil
-      (if (= x0 x1)
-        y0
-        (+ y0 (* (- y1 y0) (/ (- x x0) (- x1 x0))))))))
+  (let [[p0 p1] (take-last 2 points)]
+    (when (and p0 p1)
+      (let [x0 (:x p0) y0 (:y p0)
+            x1 (:x p1) y1 (:y p1)]
+        (cond
+          (almost= x x0) y0
+          (almost= x x1) y1
+          (almost= x0 x1) (throw (Exception. "Duplicate x"))
+          :else (+ y0 (* (- y1 y0) (/ (- x x0) (- x1 x0)))))))))
 
 (defmethod interpolate :lagrange
   [_ points x]
   (let [n (count points)]
-    (loop [i 0
-           result 0.0]
-      (if (< i n)
-        (let [xi (:x (nth points i))
-              yi (:y (nth points i))
-              li (loop [j 0
-                        term 1.0]
-                   (if (< j n)
-                     (if (= i j)
-                       (recur (inc j) term)
-                       (let [xj (:x (nth points j))]
-                         (if (= xi xj)
-                           (recur (inc j) term)
-                           (recur (inc j) (* term (/ (- x xj) (- xi xj)))))))
-                     term))]
-          (recur (inc i) (+ result (* yi li))))
-        result))))
+    (reduce
+     (fn [acc i]
+       (let [xi (:x (nth points i))
+             yi (:y (nth points i))]
+         (+ acc (* yi
+                   (reduce
+                    (fn [term j]
+                      (let [xj (:x (nth points j))]
+                        (if (= i j)
+                          term
+                          (if (almost= xi xj)
+                            (throw (Exception. "Duplicate x in Lagrange"))
+                            (* term (/ (- x xj) (- xi xj)))))))
+                    1.0
+                    (range n))))))
+     0.0
+     (range n))))
